@@ -187,6 +187,84 @@ rejected up front with a clear error rather than silently ignored, and you
 should request a single stream (`best`, `bestaudio`, `best[height<=720]`,
 etc.) that needs no post-processing.
 
+## Using with `munim-ffmpeg`
+
+`ytdlp-react-native` can be used together with [`munim-ffmpeg`](https://github.com/munimtechnologies/munim-ffmpeg) for applications that need native FFmpeg processing.
+
+`ytdlp-react-native` is responsible for **media extraction and downloading**, while `munim-ffmpeg` can be used for **merging, muxing, transcoding, subtitle processing, and other FFmpeg operations**.
+
+### Recommended architecture
+
+When downloading separate video and audio streams, you can download them independently with yt-dlp and then pass the resulting local file paths to `munim-ffmpeg`:
+
+```text
+URL
+ │
+ ▼
+ytdlp-react-native
+ │
+ ├── bestvideo → video file
+ │
+ └── bestaudio → audio file
+                    │
+                    ▼
+              munim-ffmpeg
+                    │
+                    ▼
+              final media file
+                    │
+                    ▼
+             Media Library / Gallery
+```
+
+For example, first select the desired video and audio format IDs from `extractInfo()` / `getFormats()` and download them separately:
+
+```ts
+const videoTask = await YtDlp.download({
+  url,
+  format: videoFormatId,
+  output: {
+    directory: "downloads",
+    filename: "video.%(ext)s",
+  },
+});
+
+const audioTask = await YtDlp.download({
+  url,
+  format: audioFormatId,
+  output: {
+    directory: "downloads",
+    filename: "audio.%(ext)s",
+  },
+});
+```
+
+After both downloads complete, use `munim-ffmpeg` to mux the streams without re-encoding:
+
+```text
+video + audio
+     │
+     ▼
+FFmpeg: -c copy
+     │
+     ▼
+final.mp4
+```
+
+Using stream copy (`-c copy`) avoids unnecessary transcoding, so compatible video and audio streams can be merged quickly without reducing their original quality.
+
+### Why use both packages?
+
+| Package              | Responsibility                                                                   |
+| -------------------- | -------------------------------------------------------------------------------- |
+| `ytdlp-react-native` | Extraction, format selection, downloading, cookies, playlists, download progress |
+| `munim-ffmpeg`       | Muxing, merging, transcoding, subtitles, FFprobe and media processing            |
+
+This approach is especially useful when your application already includes `munim-ffmpeg`. In that case, `ytdlp-react-native` does not need to invoke an FFmpeg executable for the application's post-processing pipeline.
+
+> **Note:** The `ffmpeg.location` option remains available for standalone yt-dlp workflows where yt-dlp itself needs to invoke an FFmpeg executable, for example when using `bestvideo+bestaudio` directly. When using `munim-ffmpeg`, you can instead download the streams separately and perform the merge through its native FFmpeg API.
+
+
 ## Instagram, TikTok and other social sites
 
 yt-dlp supports Instagram (posts, Reels, many stories) and TikTok, among
